@@ -15,11 +15,11 @@ let relay2 = false;
 const DEVICE_KEY = process.env.DEVICE_KEY;
 
 const users = {
-    user1: process.env.USER1_PASSWORD,
-    user2: process.env.USER2_PASSWORD,
-    user3: process.env.USER3_PASSWORD,
-    user4: process.env.USER4_PASSWORD,
-    user5: process.env.USER5_PASSWORD
+    Dwight: process.env.USER1_PASSWORD,
+    Philip: process.env.USER2_PASSWORD,
+    Joaquin: process.env.USER3_PASSWORD,
+    Guest: process.env.USER4_PASSWORD,
+    Kris: process.env.USER5_PASSWORD
 };
 
 const sessions = new Set();
