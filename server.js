@@ -9,8 +9,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-let relay1 = false;
-let relay2 = false;
+// Hardware Relay States
+let relay1 = false; // System Power
+let relay2 = false; // Main Motor
+let relay3 = false; // Drill Actuator
+let relay4 = false; // Solenoid Water Valve
 
 const DEVICE_KEY = process.env.DEVICE_KEY;
 
@@ -108,7 +111,9 @@ app.get("/api/state", (req, res) => {
 
     res.json({
         relay1,
-        relay2
+        relay2,
+        relay3,
+        relay4
     });
 
 });
@@ -136,15 +141,25 @@ app.post("/api/relay", (req, res) => {
         relay2 = state === true;
     }
 
+    if (relay === 3) {
+        relay3 = state === true;
+    }
+
+    if (relay === 4) {
+        relay4 = state === true;
+    }
+
     res.json({
         relay1,
-        relay2
+        relay2,
+        relay3,
+        relay4
     });
 
 });
 
 
-// ESP8266 DEVICE
+// ESP8266 DEVICE POLLING
 
 app.post("/api/device", (req, res) => {
 
@@ -158,7 +173,9 @@ app.post("/api/device", (req, res) => {
 
     res.json({
         relay1,
-        relay2
+        relay2,
+        relay3,
+        relay4
     });
 
 });
