@@ -2,7 +2,6 @@ const express = require("express");
 const crypto = require("crypto");
 
 const app = express();
-
 const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
@@ -27,18 +26,12 @@ const users = {
 
 const sessions = new Set();
 
-
 // LOGIN
-
 app.post("/login", (req, res) => {
-
     const { username, password } = req.body;
 
     if (users[username] && password === users[username]) {
-
-        const token =
-            crypto.randomBytes(32).toString("hex");
-
+        const token = crypto.randomBytes(32).toString("hex");
         sessions.add(token);
 
         res.setHeader(
@@ -47,41 +40,23 @@ app.post("/login", (req, res) => {
         );
 
         return res.redirect("/");
-
     }
 
     res.status(401).send("Invalid username or password");
-
 });
 
-
-// CHECK LOGIN
-
+// CHECK LOGIN SESSION
 function loggedIn(req) {
-
     const cookie = req.headers.cookie || "";
-
-    const match =
-        cookie.match(/session=([^;]+)/);
-
-    if (!match) {
-        return false;
-    }
-
+    const match = cookie.match(/session=([^;]+)/);
+    if (!match) return false;
     return sessions.has(match[1]);
-
 }
 
-
 // LOGOUT
-
 app.get("/logout", (req, res) => {
-
-    const cookie =
-        req.headers.cookie || "";
-
-    const match =
-        cookie.match(/session=([^;]+)/);
+    const cookie = req.headers.cookie || "";
+    const match = cookie.match(/session=([^;]+)/);
 
     if (match) {
         sessions.delete(match[1]);
@@ -92,21 +67,13 @@ app.get("/logout", (req, res) => {
         "session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0"
     );
 
-    res.redirect("/");
-
+    res.redirect("/login.html");
 });
 
-
-// GET RELAY STATE
-
+// GET RELAY STATE (WEB UI)
 app.get("/api/state", (req, res) => {
-
     if (!loggedIn(req)) {
-
-        return res.status(401).json({
-            error: "Not logged in"
-        });
-
+        return res.status(401).json({ error: "Not logged in" });
     }
 
     res.json({
@@ -115,39 +82,20 @@ app.get("/api/state", (req, res) => {
         relay3,
         relay4
     });
-
 });
 
-
-// CHANGE RELAY
-
+// CHANGE RELAY (WEB UI)
 app.post("/api/relay", (req, res) => {
-
     if (!loggedIn(req)) {
-
-        return res.status(401).json({
-            error: "Not logged in"
-        });
-
+        return res.status(401).json({ error: "Not logged in" });
     }
 
     const { relay, state } = req.body;
 
-    if (relay === 1) {
-        relay1 = state === true;
-    }
-
-    if (relay === 2) {
-        relay2 = state === true;
-    }
-
-    if (relay === 3) {
-        relay3 = state === true;
-    }
-
-    if (relay === 4) {
-        relay4 = state === true;
-    }
+    if (relay === 1) relay1 = state === true;
+    if (relay === 2) relay2 = state === true;
+    if (relay === 3) relay3 = state === true;
+    if (relay === 4) relay4 = state === true;
 
     res.json({
         relay1,
@@ -155,20 +103,12 @@ app.post("/api/relay", (req, res) => {
         relay3,
         relay4
     });
-
 });
 
-
-// ESP8266 DEVICE POLLING
-
+// ESP8266 DEVICE POLLING ENDPOINT
 app.post("/api/device", (req, res) => {
-
     if (req.query.key !== DEVICE_KEY) {
-
-        return res.status(401).json({
-            error: "Unauthorized"
-        });
-
+        return res.status(401).json({ error: "Unauthorized" });
     }
 
     res.json({
@@ -177,27 +117,14 @@ app.post("/api/device", (req, res) => {
         relay3,
         relay4
     });
-
 });
-
 
 // HEALTH CHECK
-
 app.get("/health", (req, res) => {
-
-    res.send(
-        "ESP8266 Control Server is running!"
-    );
-
+    res.send("ESP8266 Control Server is running!");
 });
 
-
 // START SERVER
-
 app.listen(PORT, "0.0.0.0", () => {
-
-    console.log(
-        `Server running on port ${PORT}`
-    );
-
+    console.log(`Server running on port ${PORT}`);
 });
