@@ -1,6 +1,5 @@
 const express = require("express");
 const crypto = require("crypto");
-
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -8,7 +7,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-// Hardware Relay States
+// Relay States
 let relay1 = false; // System Power
 let relay2 = false; // Main Motor
 let relay3 = false; // Drill Actuator
@@ -29,27 +28,25 @@ const sessions = new Set();
 // LOGIN
 app.post("/login", (req, res) => {
     const { username, password } = req.body;
-
     if (users[username] && password === users[username]) {
         const token = crypto.randomBytes(32).toString("hex");
         sessions.add(token);
-
         res.setHeader(
             "Set-Cookie",
             `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/`
         );
-
         return res.redirect("/");
     }
-
     res.status(401).send("Invalid username or password");
 });
 
-// CHECK LOGIN SESSION
+// CHECK LOGIN
 function loggedIn(req) {
     const cookie = req.headers.cookie || "";
     const match = cookie.match(/session=([^;]+)/);
-    if (!match) return false;
+    if (!match) {
+        return false;
+    }
     return sessions.has(match[1]);
 }
 
@@ -57,25 +54,23 @@ function loggedIn(req) {
 app.get("/logout", (req, res) => {
     const cookie = req.headers.cookie || "";
     const match = cookie.match(/session=([^;]+)/);
-
     if (match) {
         sessions.delete(match[1]);
     }
-
     res.setHeader(
         "Set-Cookie",
         "session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0"
     );
-
     res.redirect("/login.html");
 });
 
-// GET RELAY STATE (WEB UI)
+// GET RELAY STATE
 app.get("/api/state", (req, res) => {
     if (!loggedIn(req)) {
-        return res.status(401).json({ error: "Not logged in" });
+        return res.status(401).json({
+            error: "Not logged in"
+        });
     }
-
     res.json({
         relay1,
         relay2,
@@ -84,14 +79,14 @@ app.get("/api/state", (req, res) => {
     });
 });
 
-// CHANGE RELAY (WEB UI)
+// CHANGE RELAY
 app.post("/api/relay", (req, res) => {
     if (!loggedIn(req)) {
-        return res.status(401).json({ error: "Not logged in" });
+        return res.status(401).json({
+            error: "Not logged in"
+        });
     }
-
     const { relay, state } = req.body;
-
     if (relay === 1) relay1 = state === true;
     if (relay === 2) relay2 = state === true;
     if (relay === 3) relay3 = state === true;
@@ -105,12 +100,13 @@ app.post("/api/relay", (req, res) => {
     });
 });
 
-// ESP8266 DEVICE POLLING ENDPOINT
+// ESP8266 DEVICE POLLING
 app.post("/api/device", (req, res) => {
     if (req.query.key !== DEVICE_KEY) {
-        return res.status(401).json({ error: "Unauthorized" });
+        return res.status(401).json({
+            error: "Unauthorized"
+        });
     }
-
     res.json({
         relay1,
         relay2,
