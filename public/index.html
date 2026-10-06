@@ -1,804 +1,114 @@
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>ESP8266 Macerator Dashboard</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    
-
+    <title>Macerator Control Center</title>
     <style>
-
-        :root {
-
-            --bg-color: #0f172a;
-
-            --card-bg: #1e293b;
-
-            --card-border: #334155;
-
-            --text-main: #f8fafc;
-
-            --text-muted: #94a3b8;
-
-            --primary: #3b82f6;
-
-            --primary-hover: #2563eb;
-
-            --success: #10b981;
-
-            --success-bg: rgba(16, 185, 129, 0.15);
-
-            --danger: #ef4444;
-
-            --danger-bg: rgba(239, 68, 68, 0.15);
-
-            --input-bg: #0f172a;
-
-            --radius: 16px;
-
-        }
-
-
-
-        * {
-
-            box-sizing: border-box;
-
-            margin: 0;
-
-            padding: 0;
-
-            font-family: 'Inter', sans-serif;
-
-        }
-
-
-
-        body {
-
-            background-color: var(--bg-color);
-
-            color: var(--text-main);
-
-            min-height: 100vh;
-
-            display: flex;
-
-            justify-content: center;
-
-            align-items: center;
-
-            padding: 20px;
-
-        }
-
-
-
-        .container {
-
-            width: 100%;
-
-            max-width: 440px;
-
-        }
-
-
-
-        .header {
-
-            text-align: center;
-
-            margin-bottom: 28px;
-
-        }
-
-
-
-        .header h1 {
-
-            font-size: 24px;
-
-            font-weight: 700;
-
-            letter-spacing: -0.5px;
-
-            margin-bottom: 6px;
-
-        }
-
-
-
-        .header p {
-
-            color: var(--text-muted);
-
-            font-size: 14px;
-
-        }
-
-
-
-        .card {
-
-            background: var(--card-bg);
-
-            border: 1px solid var(--card-border);
-
-            border-radius: var(--radius);
-
-            padding: 24px;
-
-            margin-bottom: 16px;
-
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-
-            transition: transform 0.2s ease, border-color 0.2s ease;
-
-        }
-
-
-
-        /* LOGIN BOX */
-
-        .login-box h2 {
-
-            font-size: 18px;
-
-            font-weight: 600;
-
-            margin-bottom: 20px;
-
-            text-align: center;
-
-        }
-
-
-
-        .form-group {
-
-            margin-bottom: 16px;
-
-        }
-
-
-
-        .form-group label {
-
-            display: block;
-
-            font-size: 12px;
-
-            font-weight: 600;
-
-            color: var(--text-muted);
-
-            margin-bottom: 6px;
-
-            text-transform: uppercase;
-
-            letter-spacing: 0.5px;
-
-        }
-
-
-
-        input {
-
-            width: 100%;
-
-            background: var(--input-bg);
-
-            border: 1px solid var(--card-border);
-
-            border-radius: 10px;
-
-            padding: 12px 16px;
-
-            font-size: 15px;
-
-            color: var(--text-main);
-
-            outline: none;
-
-            transition: border-color 0.2s;
-
-        }
-
-
-
-        input:focus {
-
-            border-color: var(--primary);
-
-        }
-
-
-
-        .btn-primary {
-
-            width: 100%;
-
-            background: var(--primary);
-
-            color: white;
-
-            border: none;
-
-            border-radius: 10px;
-
-            padding: 14px;
-
-            font-size: 15px;
-
-            font-weight: 600;
-
-            cursor: pointer;
-
-            transition: background 0.2s;
-
-            margin-top: 8px;
-
-        }
-
-
-
-        .btn-primary:hover {
-
-            background: var(--primary-hover);
-
-        }
-
-
-
-        #loginError {
-
-            color: var(--danger);
-
-            font-size: 13px;
-
-            text-align: center;
-
-            margin-top: 12px;
-
-        }
-
-
-
-        /* CONTROL CARDS */
-
-        .device-card {
-
-            display: flex;
-
-            flex-direction: column;
-
-            gap: 16px;
-
-        }
-
-
-
-        .device-info {
-
-            display: flex;
-
-            justify-content: space-between;
-
-            align-items: center;
-
-        }
-
-
-
-        .device-title h3 {
-
-            font-size: 18px;
-
-            font-weight: 600;
-
-        }
-
-
-
-        .device-title span {
-
-            font-size: 12px;
-
-            color: var(--text-muted);
-
-        }
-
-
-
-        .badge {
-
-            display: inline-flex;
-
-            align-items: center;
-
-            gap: 6px;
-
-            padding: 6px 12px;
-
-            border-radius: 20px;
-
-            font-size: 12px;
-
-            font-weight: 700;
-
-            letter-spacing: 0.5px;
-
-        }
-
-
-
-        .badge-off {
-
-            background: var(--danger-bg);
-
-            color: var(--danger);
-
-        }
-
-
-
-        .badge-on {
-
-            background: var(--success-bg);
-
-            color: var(--success);
-
-        }
-
-
-
-        .status-dot {
-
-            width: 8px;
-
-            height: 8px;
-
-            border-radius: 50%;
-
-            background: currentColor;
-
-        }
-
-
-
-        .badge-on .status-dot {
-
-            box-shadow: 0 0 8px var(--success);
-
-        }
-
-
-
-        /* CONTROL BUTTONS */
-
-        .button-group {
-
-            display: grid;
-
-            grid-template-columns: 1fr 1fr;
-
-            gap: 12px;
-
-        }
-
-
-
-        .btn-action {
-
-            border: 1px solid var(--card-border);
-
-            background: var(--input-bg);
-
-            color: var(--text-main);
-
-            border-radius: 10px;
-
-            padding: 12px;
-
-            font-size: 14px;
-
-            font-weight: 600;
-
-            cursor: pointer;
-
-            transition: all 0.2s;
-
-        }
-
-
-
-        .btn-action.btn-on:hover {
-
-            background: var(--success);
-
-            border-color: var(--success);
-
-            color: white;
-
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-
-        }
-
-
-
-        .btn-action.btn-off:hover {
-
-            background: var(--danger);
-
-            border-color: var(--danger);
-
-            color: white;
-
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-
-        }
-
-
-
-        .btn-logout {
-
-            width: 100%;
-
-            background: transparent;
-
-            border: 1px solid var(--card-border);
-
-            color: var(--text-muted);
-
-            padding: 12px;
-
-            border-radius: 10px;
-
-            font-size: 14px;
-
-            font-weight: 600;
-
-            cursor: pointer;
-
-            transition: all 0.2s;
-
-        }
-
-
-
-        .btn-logout:hover {
-
-            background: rgba(239, 68, 68, 0.1);
-
-            color: var(--danger);
-
-            border-color: var(--danger);
-
-        }
-
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; text-align: center; padding: 20px; margin: 0; }
+        h1 { margin-top: 10px; font-size: 24px; color: #f8fafc; }
+        .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; max-width: 800px; margin: 20px auto; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; width: 280px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); border: 1px solid #334155; }
+        .card h3 { margin-top: 0; color: #94a3b8; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+        .status { font-weight: bold; margin: 15px 0; font-size: 20px; }
+        .btn-group { display: flex; justify-content: space-between; gap: 10px; }
+        .btn { flex: 1; padding: 12px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; transition: 0.2s; font-size: 14px; }
+        .btn-on { background: #10b981; color: white; }
+        .btn-on:hover { background: #059669; }
+        .btn-off { background: #ef4444; color: white; }
+        .btn-off:hover { background: #dc2626; }
+        .status-on { color: #10b981; }
+        .status-off { color: #64748b; }
+        .logout-btn { display: inline-block; margin-top: 20px; color: #94a3b8; text-decoration: none; font-size: 14px; }
+        .logout-btn:hover { color: #f8fafc; }
     </style>
-
 </head>
-
 <body>
-
-
-
-<div class="container">
-
-    <div class="header">
-
-        <h1>Automated Paper Macerator</h1>
-
-        <p>ESP8266 Device Controller</p>
-
-    </div>
-
-
-
-    <!-- LOGIN PANEL -->
-
-    <div id="loginBox" class="card login-box">
-
-        <h2>Account Login</h2>
-
-        <form id="loginForm">
-
-            <div class="form-group">
-
-                <label>Username</label>
-
-                <input type="text" name="username" placeholder="Enter username" required>
-
+    <h1>Macerator Control Center</h1>
+    <div class="grid">
+        <!-- Relay 1: System Power -->
+        <div class="card">
+            <h3>System Power</h3>
+            <div id="status1" class="status status-off">OFFLINE</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(1, true)">POWER ON</button>
+                <button class="btn btn-off" onclick="setRelay(1, false)">POWER OFF</button>
             </div>
-
-            <div class="form-group">
-
-                <label>Password</label>
-
-                <input type="password" name="password" placeholder="Enter password" required>
-
-            </div>
-
-            <button type="submit" class="btn-primary">Sign In</button>
-
-        </form>
-
-        <p id="loginError"></p>
-
-    </div>
-
-
-
-    <!-- DASHBOARD PANEL -->
-
-    <div id="dashboard" style="display:none;">
-
-        
-
-        <!-- SYSTEM (RELAY 1 - D1) -->
-
-        <div class="card device-card">
-
-            <div class="device-info">
-
-                <div class="device-title">
-
-                    <h3>System Power</h3>
-
-                    <span>Relay 1 (Pin D1)</span>
-
-                </div>
-
-                <div id="relay1Badge" class="badge badge-off">
-
-                    <span class="status-dot"></span>
-
-                    <span id="relay1Status">OFF</span>
-
-                </div>
-
-            </div>
-
-            <div class="button-group">
-
-                <button class="btn-action btn-on" onclick="setRelay(1, true)">POWER ON</button>
-
-                <button class="btn-action btn-off" onclick="setRelay(1, false)">POWER OFF</button>
-
-            </div>
-
         </div>
 
-
-
-        <!-- MOTOR (RELAY 2 - D2) -->
-
-        <div class="card device-card">
-
-            <div class="device-info">
-
-                <div class="device-title">
-
-                    <h3>Main Motor</h3>
-
-                    <span>Relay 2 (Pin D2)</span>
-
-                </div>
-
-                <div id="relay2Badge" class="badge badge-off">
-
-                    <span class="status-dot"></span>
-
-                    <span id="relay2Status">OFF</span>
-
-                </div>
-
+        <!-- Relay 2: Main Motor -->
+        <div class="card">
+            <h3>Main Motor</h3>
+            <div id="status2" class="status status-off">STOPPED</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(2, true)">START</button>
+                <button class="btn btn-off" onclick="setRelay(2, false)">STOP</button>
             </div>
-
-            <div class="button-group">
-
-                <button class="btn-action btn-on" onclick="setRelay(2, true)">START MOTOR</button>
-
-                <button class="btn-action btn-off" onclick="setRelay(2, false)">STOP MOTOR</button>
-
-            </div>
-
         </div>
 
-
-
-        <!-- LOGOUT -->
-
-        <div style="margin-top: 24px;">
-
-            <button class="btn-logout" onclick="logout()">LOGOUT SESSION</button>
-
+        <!-- Relay 3: Drill Actuator -->
+        <div class="card">
+            <h3>Drill Actuator</h3>
+            <div id="status3" class="status status-off">STOPPED</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(3, true)">START</button>
+                <button class="btn btn-off" onclick="setRelay(3, false)">STOP</button>
+            </div>
         </div>
 
-
-
+        <!-- Relay 4: Solenoid Water Valve -->
+        <div class="card">
+            <h3>Solenoid Valve</h3>
+            <div id="status4" class="status status-off">CLOSED</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(4, true)">OPEN</button>
+                <button class="btn btn-off" onclick="setRelay(4, false)">CLOSE</button>
+            </div>
+        </div>
     </div>
 
-</div>
-
-
-
-<script>
-
-document.getElementById("loginForm").addEventListener("submit", async function(e) {
-
-    e.preventDefault();
-
-    const formData = new FormData(this);
-
-    const response = await fetch("/login", {
-
-        method: "POST",
-
-        body: new URLSearchParams(formData)
-
-    });
-
-
-
-    if (response.ok || response.redirected) {
-
-        showDashboard();
-
-        updateStatus();
-
-    } else {
-
-        document.getElementById("loginError").innerText = "Invalid username or password";
-
-    }
-
-});
-
-
-
-async function checkLogin() {
-
-    const response = await fetch("/api/state");
-
-    if (response.ok) {
-
-        showDashboard();
-
-        updateStatus();
-
-    }
-
-}
-
-
-
-function showDashboard() {
-
-    document.getElementById("loginBox").style.display = "none";
-
-    document.getElementById("dashboard").style.display = "block";
-
-}
-
-
-
-async function setRelay(relay, state) {
-
-    const response = await fetch("/api/relay", {
-
-        method: "POST",
-
-        headers: { "Content-Type": "application/json" },
-
-        body: JSON.stringify({ relay: relay, state: state })
-
-    });
-
-
-
-    if (response.ok) {
-
-        updateStatus();
-
-    }
-
-}
-
-
-
-async function updateStatus() {
-
-    const response = await fetch("/api/state");
-
-    if (!response.ok) return;
-
-
-
-    const data = await response.json();
-
-
-
-    // Update Relay 1 (System) UI
-
-    const r1Badge = document.getElementById("relay1Badge");
-
-    const r1Status = document.getElementById("relay1Status");
-
-    if (data.relay1) {
-
-        r1Status.innerText = "ONLINE";
-
-        r1Badge.className = "badge badge-on";
-
-    } else {
-
-        r1Status.innerText = "OFFLINE";
-
-        r1Badge.className = "badge badge-off";
-
-    }
-
-
-
-    // Update Relay 2 (Motor) UI
-
-    const r2Badge = document.getElementById("relay2Badge");
-
-    const r2Status = document.getElementById("relay2Status");
-
-    if (data.relay2) {
-
-        r2Status.innerText = "RUNNING";
-
-        r2Badge.className = "badge badge-on";
-
-    } else {
-
-        r2Status.innerText = "STOPPED";
-
-        r2Badge.className = "badge badge-off";
-
-    }
-
-}
-
-
-
-// Auto refresh status every 1 second
-
-setInterval(updateStatus, 1000);
-
-
-
-function logout() {
-
-    window.location.href = "/logout";
-
-}
-
-
-
-checkLogin();
-
-</script>
-
-
-
+    <a href="/logout" class="logout-btn">Logout</a>
+
+    <script>
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                if (res.status === 401) {
+                    window.location.href = '/login.html'; // Redirect if session expired
+                    return;
+                }
+                const data = await res.json();
+                
+                updateUI('status1', data.relay1, 'ONLINE', 'OFFLINE');
+                updateUI('status2', data.relay2, 'RUNNING', 'STOPPED');
+                updateUI('status3', data.relay3, 'RUNNING', 'STOPPED');
+                updateUI('status4', data.relay4, 'OPEN', 'CLOSED');
+            } catch (err) {
+                console.error("Error fetching state:", err);
+            }
+        }
+
+        function updateUI(elementId, state, onText, offText) {
+            const el = document.getElementById(elementId);
+            el.innerText = state ? onText : offText;
+            el.className = 'status ' + (state ? 'status-on' : 'status-off');
+        }
+
+        async function setRelay(relay, state) {
+            try {
+                await fetch('/api/relay', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ relay, state })
+                });
+                fetchState();
+            } catch (err) {
+                console.error("Error setting relay state:", err);
+            }
+        }
+
+        setInterval(fetchState, 1000);
+        fetchState();
+    </script>
 </body>
-
-</html> 
-
+</html>
