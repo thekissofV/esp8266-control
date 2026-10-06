@@ -3,70 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Macerator Control</title>
+    <title>Macerator Control Center</title>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: #0f172a; 
-            color: white; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            margin: 0; 
-        }
-        .login-card { 
-            background: #1e293b; 
-            padding: 30px; 
-            border-radius: 12px; 
-            width: 300px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
-            border: 1px solid #334155; 
-            text-align: center; 
-        }
-        h2 { margin-top: 0; color: #f8fafc; font-size: 22px; }
-        .input-group { margin-bottom: 15px; text-align: left; }
-        label { display: block; margin-bottom: 5px; color: #94a3b8; font-size: 14px; }
-        input { 
-            width: 100%; 
-            padding: 10px; 
-            border-radius: 6px; 
-            border: 1px solid #334155; 
-            background: #0f172a; 
-            color: white; 
-            box-sizing: border-box; 
-            font-size: 14px;
-        }
-        input:focus { outline: none; border-color: #10b981; }
-        button { 
-            width: 100%; 
-            padding: 12px; 
-            background: #10b981; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            margin-top: 10px; 
-            font-size: 15px;
-        }
-        button:hover { background: #059669; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; text-align: center; padding: 20px; margin: 0; }
+        h1 { margin-top: 10px; font-size: 24px; color: #f8fafc; }
+        .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; max-width: 800px; margin: 20px auto; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; width: 280px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); border: 1px solid #334155; }
+        .card h3 { margin-top: 0; color: #94a3b8; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+        .status { font-weight: bold; margin: 15px 0; font-size: 20px; }
+        .btn-group { display: flex; justify-content: space-between; gap: 10px; }
+        .btn { flex: 1; padding: 12px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; transition: 0.2s; font-size: 14px; }
+        .btn-on { background: #10b981; color: white; }
+        .btn-on:hover { background: #059669; }
+        .btn-off { background: #ef4444; color: white; }
+        .btn-off:hover { background: #dc2626; }
+        .status-on { color: #10b981; }
+        .status-off { color: #64748b; }
+        .logout-btn { display: inline-block; margin-top: 20px; color: #94a3b8; text-decoration: none; font-size: 14px; }
+        .logout-btn:hover { color: #f8fafc; }
     </style>
 </head>
 <body>
-    <div class="login-card">
-        <h2>Macerator Control</h2>
-        <form action="/login" method="POST">
-            <div class="input-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autocomplete="username">
+    <h1>Macerator Control Center</h1>
+    <div class="grid">
+        <!-- Relay 1: System Power -->
+        <div class="card">
+            <h3>System Power</h3>
+            <div id="status1" class="status status-off">OFFLINE</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(1, true)">POWER ON</button>
+                <button class="btn btn-off" onclick="setRelay(1, false)">POWER OFF</button>
             </div>
-            <div class="input-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+
+        <!-- Relay 2: Main Motor -->
+        <div class="card">
+            <h3>Main Motor</h3>
+            <div id="status2" class="status status-off">STOPPED</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(2, true)">START</button>
+                <button class="btn btn-off" onclick="setRelay(2, false)">STOP</button>
             </div>
-            <button type="submit">Log In</button>
-        </form>
+        </div>
+
+        <!-- Relay 3: Drill Actuator -->
+        <div class="card">
+            <h3>Drill Actuator</h3>
+            <div id="status3" class="status status-off">STOPPED</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(3, true)">START</button>
+                <button class="btn btn-off" onclick="setRelay(3, false)">STOP</button>
+            </div>
+        </div>
+
+        <!-- Relay 4: Solenoid Water Valve -->
+        <div class="card">
+            <h3>Solenoid Valve</h3>
+            <div id="status4" class="status status-off">CLOSED</div>
+            <div class="btn-group">
+                <button class="btn btn-on" onclick="setRelay(4, true)">OPEN</button>
+                <button class="btn btn-off" onclick="setRelay(4, false)">CLOSE</button>
+            </div>
+        </div>
     </div>
+
+    <a href="/logout" class="logout-btn">Logout</a>
+
+    <script>
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                const data = await res.json();
+                
+                updateUI('status1', data.relay1, 'ONLINE', 'OFFLINE');
+                updateUI('status2', data.relay2, 'RUNNING', 'STOPPED');
+                updateUI('status3', data.relay3, 'RUNNING', 'STOPPED');
+                updateUI('status4', data.relay4, 'OPEN', 'CLOSED');
+            } catch (err) {
+                console.error("Error fetching state:", err);
+            }
+        }
+
+        function updateUI(elementId, state, onText, offText) {
+            const el = document.getElementById(elementId);
+            el.innerText = state ? onText : offText;
+            el.className = 'status ' + (state ? 'status-on' : 'status-off');
+        }
+
+        async function setRelay(relay, state) {
+            try {
+                await fetch('/api/relay', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ relay, state })
+                });
+                fetchState();
+            } catch (err) {
+                console.error("Error setting relay state:", err);
+            }
+        }
+
+        setInterval(fetchState, 1000);
+        fetchState();
+    </script>
 </body>
 </html>
