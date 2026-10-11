@@ -3,33 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Macerator Control Center</title>
+    <title>Macerator Industrial Control Center</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; text-align: center; padding: 20px; margin: 0; }
-        h1 { margin-top: 10px; font-size: 24px; color: #f8fafc; }
-        .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; max-width: 800px; margin: 20px auto; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; width: 280px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); border: 1px solid #334155; }
-        .card h3 { margin-top: 0; color: #94a3b8; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
-        .status { font-weight: bold; margin: 15px 0; font-size: 20px; }
-        .btn-group { display: flex; justify-content: space-between; gap: 10px; }
-        .btn { flex: 1; padding: 12px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; transition: 0.2s; font-size: 14px; }
-        .btn-on { background: #10b981; color: white; }
-        .btn-on:hover { background: #059669; }
-        .btn-off { background: #ef4444; color: white; }
-        .btn-off:hover { background: #dc2626; }
-        .status-on { color: #10b981; }
+        :root {
+            --bg-main: #0f172a;
+            --card-bg: #1e293b;
+            --border-color: #334155;
+            --accent-green: #10b981;
+            --accent-green-hover: #059669;
+            --accent-red: #ef4444;
+            --accent-red-hover: #dc2626;
+            --text-muted: #94a3b8;
+            --text-light: #f8fafc;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-main);
+            color: var(--text-light);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 26px;
+            letter-spacing: 0.5px;
+        }
+
+        .system-status-pill {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            background: #1e293b;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 22px;
+            border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .card h3 {
+            margin: 0 0 10px 0;
+            color: var(--text-muted);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-display {
+            font-size: 22px;
+            font-weight: bold;
+            margin: 10px 0 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #64748b;
+        }
+
+        .status-on { color: var(--accent-green); }
+        .status-on .status-dot { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        
         .status-off { color: #64748b; }
-        .logout-btn { display: inline-block; margin-top: 20px; color: #94a3b8; text-decoration: none; font-size: 14px; }
-        .logout-btn:hover { color: #f8fafc; }
+        .status-off .status-dot { background: #64748b; }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            font-weight: bold;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            font-size: 14px;
+        }
+
+        .btn:active { transform: scale(0.98); }
+        .btn-on { background: var(--accent-green); color: white; }
+        .btn-on:hover { background: var(--accent-green-hover); }
+        .btn-off { background: var(--accent-red); color: white; }
+        .btn-off:hover { background: var(--accent-red-hover); }
+
+        /* Level Meter Gauge for Node 2 Sensor */
+        .sensor-card { grid-column: 1 / -1; }
+        .level-container {
+            background: #0f172a;
+            border-radius: 8px;
+            height: 24px;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            margin-top: 10px;
+            position: relative;
+        }
+
+        .level-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent-green), #3b82f6);
+            transition: width 0.5s ease-in-out;
+        }
+
+        .level-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        }
+
+        .logout-btn {
+            margin-top: 30px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            color: var(--text-light);
+            background: var(--card-bg);
+        }
     </style>
 </head>
 <body>
-    <h1>Macerator Control Center</h1>
+
+    <header>
+        <h1>Macerator Control Center</h1>
+        <div id="connectionPill" class="system-status-pill">Connecting to Render...</div>
+    </header>
+
     <div class="grid">
+        <!-- Node 2 Telemetry Card -->
+        <div class="card sensor-card">
+            <h3>Node 2: Secondary Ultrasonic Sensor (Hopper Level)</h3>
+            <div class="status-display">
+                <span id="sensorValue">0</span> <span style="font-size: 16px; color: var(--text-muted);">cm distance</span>
+            </div>
+            <div class="level-container">
+                <div id="levelBar" class="level-bar"></div>
+                <div id="levelText" class="level-text">0% Capacity</div>
+            </div>
+        </div>
+
         <!-- Relay 1: System Power -->
         <div class="card">
             <h3>System Power</h3>
-            <div id="status1" class="status status-off">OFFLINE</div>
+            <div id="status1" class="status-display status-off">
+                <span class="status-dot"></span><span class="text">OFFLINE</span>
+            </div>
             <div class="btn-group">
                 <button class="btn btn-on" onclick="setRelay(1, true)">POWER ON</button>
                 <button class="btn btn-off" onclick="setRelay(1, false)">POWER OFF</button>
@@ -39,7 +205,9 @@
         <!-- Relay 2: Main Motor -->
         <div class="card">
             <h3>Main Motor</h3>
-            <div id="status2" class="status status-off">STOPPED</div>
+            <div id="status2" class="status-display status-off">
+                <span class="status-dot"></span><span class="text">STOPPED</span>
+            </div>
             <div class="btn-group">
                 <button class="btn btn-on" onclick="setRelay(2, true)">START</button>
                 <button class="btn btn-off" onclick="setRelay(2, false)">STOP</button>
@@ -49,7 +217,9 @@
         <!-- Relay 3: Drill Actuator -->
         <div class="card">
             <h3>Drill Actuator</h3>
-            <div id="status3" class="status status-off">STOPPED</div>
+            <div id="status3" class="status-display status-off">
+                <span class="status-dot"></span><span class="text">STOPPED</span>
+            </div>
             <div class="btn-group">
                 <button class="btn btn-on" onclick="setRelay(3, true)">START</button>
                 <button class="btn btn-off" onclick="setRelay(3, false)">STOP</button>
@@ -59,7 +229,9 @@
         <!-- Relay 4: Solenoid Water Valve -->
         <div class="card">
             <h3>Solenoid Valve</h3>
-            <div id="status4" class="status status-off">CLOSED</div>
+            <div id="status4" class="status-display status-off">
+                <span class="status-dot"></span><span class="text">CLOSED</span>
+            </div>
             <div class="btn-group">
                 <button class="btn btn-on" onclick="setRelay(4, true)">OPEN</button>
                 <button class="btn btn-off" onclick="setRelay(4, false)">CLOSE</button>
@@ -70,6 +242,8 @@
     <a href="/logout" class="logout-btn">Logout</a>
 
     <script>
+        const MAX_TANK_DEPTH_CM = 50; // Adjust to your macerator bin depth in cm
+
         async function fetchState() {
             try {
                 const res = await fetch('/api/state');
@@ -79,19 +253,35 @@
                 }
                 const data = await res.json();
                 
+                document.getElementById('connectionPill').innerText = 'Cloud Sync: Active';
+                document.getElementById('connectionPill').style.borderColor = '#10b981';
+
                 updateUI('status1', data.relay1, 'ONLINE', 'OFFLINE');
                 updateUI('status2', data.relay2, 'RUNNING', 'STOPPED');
                 updateUI('status3', data.relay3, 'RUNNING', 'STOPPED');
                 updateUI('status4', data.relay4, 'OPEN', 'CLOSED');
+
+                // Update Ultrasonic Sensor Data
+                const dist = data.node2Distance || 0;
+                document.getElementById('sensorValue').innerText = dist;
+                
+                // Calculate estimated fullness percentage (closer distance = fuller bin)
+                let fillPercent = Math.max(0, Math.min(100, Math.round(((MAX_TANK_DEPTH_CM - dist) / MAX_TANK_DEPTH_CM) * 100)));
+                document.getElementById('levelBar').style.width = fillPercent + '%';
+                document.getElementById('levelText').innerText = fillPercent + '% Full (' + dist + ' cm)';
+
             } catch (err) {
+                document.getElementById('connectionPill').innerText = 'Cloud Sync: Error';
+                document.getElementById('connectionPill').style.borderColor = '#ef4444';
                 console.error("Error fetching state:", err);
             }
         }
 
         function updateUI(elementId, state, onText, offText) {
             const el = document.getElementById(elementId);
-            el.innerText = state ? onText : offText;
-            el.className = 'status ' + (state ? 'status-on' : 'status-off');
+            const textSpan = el.querySelector('.text');
+            textSpan.innerText = state ? onText : offText;
+            el.className = 'status-display ' + (state ? 'status-on' : 'status-off');
         }
 
         async function setRelay(relay, state) {
