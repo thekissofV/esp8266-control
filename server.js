@@ -92,16 +92,33 @@ app.get("/api/state", (req, res) => {
     res.json({ relay1, relay2, relay3, relay4, node2Distance });
 });
 
-// CHANGE RELAY (Web UI)
+// CHANGE RELAY (Web UI) WITH SAFETY INTERLOCK
 app.post("/api/relay", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
     }
     const { relay, state } = req.body;
-    if (relay === 1) relay1 = state === true;
-    if (relay === 2) relay2 = state === true;
-    if (relay === 3) relay3 = state === true;
-    if (relay === 4) relay4 = state === true;
+
+    // Relay 1: System Power Logic
+    if (relay === 1) {
+        relay1 = state === true;
+        // AUTO-CUTOFF: Turning System Power OFF shuts down all motors/valves immediately
+        if (!relay1) {
+            relay2 = false; // Main Motor STOP
+            relay3 = false; // Drill Actuator STOP
+            relay4 = false; // Solenoid Valve CLOSE
+        }
+    } else {
+        // SAFETY INTERLOCK: Reject turning ON motor/actuator/valve if System Power is OFF
+        if (!relay1 && state === true) {
+            return res.status(400).json({ 
+                error: "Safety Interlock: System Power must be turned ON first!" 
+            });
+        }
+        if (relay === 2) relay2 = state === true;
+        if (relay === 3) relay3 = state === true;
+        if (relay === 4) relay4 = state === true;
+    }
 
     res.json({ relay1, relay2, relay3, relay4, node2Distance });
 });
