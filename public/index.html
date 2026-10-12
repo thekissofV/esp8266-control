@@ -117,12 +117,12 @@
         }
 
         .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
         .btn-on { background: var(--accent-green); color: white; }
         .btn-on:hover { background: var(--accent-green-hover); }
         .btn-off { background: var(--accent-red); color: white; }
         .btn-off:hover { background: var(--accent-red-hover); }
 
-        /* Level Meter Gauge for Node 2 Sensor */
         .sensor-card { grid-column: 1 / -1; }
         .level-container {
             background: #0f172a;
@@ -178,7 +178,7 @@
     </header>
 
     <div class="grid">
-        <!-- Node 2 Telemetry Card -->
+        <!-- Node 2 Sensor Card -->
         <div class="card sensor-card">
             <h3>Node 2: Secondary Ultrasonic Sensor (Hopper Level)</h3>
             <div class="status-display">
@@ -209,7 +209,7 @@
                 <span class="status-dot"></span><span class="text">STOPPED</span>
             </div>
             <div class="btn-group">
-                <button class="btn btn-on" onclick="setRelay(2, true)">START</button>
+                <button id="btnOn2" class="btn btn-on" onclick="setRelay(2, true)">START</button>
                 <button class="btn btn-off" onclick="setRelay(2, false)">STOP</button>
             </div>
         </div>
@@ -221,7 +221,7 @@
                 <span class="status-dot"></span><span class="text">STOPPED</span>
             </div>
             <div class="btn-group">
-                <button class="btn btn-on" onclick="setRelay(3, true)">START</button>
+                <button id="btnOn3" class="btn btn-on" onclick="setRelay(3, true)">START</button>
                 <button class="btn btn-off" onclick="setRelay(3, false)">STOP</button>
             </div>
         </div>
@@ -233,7 +233,7 @@
                 <span class="status-dot"></span><span class="text">CLOSED</span>
             </div>
             <div class="btn-group">
-                <button class="btn btn-on" onclick="setRelay(4, true)">OPEN</button>
+                <button id="btnOn4" class="btn btn-on" onclick="setRelay(4, true)">OPEN</button>
                 <button class="btn btn-off" onclick="setRelay(4, false)">CLOSE</button>
             </div>
         </div>
@@ -242,38 +242,59 @@
     <a href="/logout" class="logout-btn">Logout</a>
 
     <script>
-        const MAX_TANK_DEPTH_CM = 50; // Adjust to your macerator bin depth in cm
+        const MAX_TANK_DEPTH_CM = 50;
 
         async function fetchState() {
             try {
-                const res = await fetch('/api/state');
+                const res = await fetch('/api/state', { cache: 'no-store' });
                 if (res.status === 401) {
                     window.location.href = '/login.html';
                     return;
                 }
                 const data = await res.json();
                 
-                document.getElementById('connectionPill').innerText = 'Cloud Sync: Active';
-                document.getElementById('connectionPill').style.borderColor = '#10b981';
+                const pill = document.getElementById('connectionPill');
+                pill.innerText = 'Cloud Sync: Active';
+                pill.style.borderColor = '#10b981';
+
+                const dist = data.node2Distance || 0;
+                const isOverflow = (dist > 0 && dist <= 22);
 
                 updateUI('status1', data.relay1, 'ONLINE', 'OFFLINE');
-                updateUI('status2', data.relay2, 'RUNNING', 'STOPPED');
+
+                // Disable START buttons visually when System Power is OFF or Bin is Full
+                document.getElementById('btnOn2').disabled = !data.relay1 || isOverflow;
+                document.getElementById('btnOn3').disabled = !data.relay1;
+                document.getElementById('btnOn4').disabled = !data.relay1;
+
+                // Motor status with overflow warning
+                const status2El = document.getElementById('status2');
+                if (isOverflow && !data.relay2) {
+                    status2El.querySelector('.text').innerText = 'OVERFLOW TRIP (<=22cm)';
+                    status2El.className = 'status-display status-off';
+                    status2El.style.color = 'var(--accent-red)';
+                } else {
+                    status2El.style.color = '';
+                    updateUI('status2', data.relay2, 'RUNNING', 'STOPPED');
+                }
+
                 updateUI('status3', data.relay3, 'RUNNING', 'STOPPED');
                 updateUI('status4', data.relay4, 'OPEN', 'CLOSED');
 
-                // Update Ultrasonic Sensor Data
-                const dist = data.node2Distance || 0;
+                // Sensor Level Display
                 document.getElementById('sensorValue').innerText = dist;
-                
-                // Calculate estimated fullness percentage (closer distance = fuller bin)
                 let fillPercent = Math.max(0, Math.min(100, Math.round(((MAX_TANK_DEPTH_CM - dist) / MAX_TANK_DEPTH_CM) * 100)));
-                document.getElementById('levelBar').style.width = fillPercent + '%';
+                if (dist === 0) fillPercent = 0;
+
+                const levelBar = document.getElementById('levelBar');
+                levelBar.style.width = fillPercent + '%';
+                levelBar.style.background = isOverflow ? 'var(--accent-red)' : 'linear-gradient(90deg, var(--accent-green), #3b82f6)';
                 document.getElementById('levelText').innerText = fillPercent + '% Full (' + dist + ' cm)';
 
             } catch (err) {
-                document.getElementById('connectionPill').innerText = 'Cloud Sync: Error';
-                document.getElementById('connectionPill').style.borderColor = '#ef4444';
-                console.error("Error fetching state:", err);
+                const pill = document.getElementById('connectionPill');
+                pill.innerText = 'Cloud Sync: Error';
+                pill.style.borderColor = 'var(--accent-red)';
             }
         }
 
@@ -286,14 +307,24 @@
 
         async function setRelay(relay, state) {
             try {
-                await fetch('/api/relay', {
+                const res = await fetch('/api/relay', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ relay, state })
                 });
+
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || 'Operation failed');
+                }
                 fetchState();
             } catch (err) {
-                console.error("Error setting relay state:", err);
+                alert('Failed to send command to server');
             }
         }
 
@@ -302,5 +333,3 @@
     </script>
 </body>
 </html>
-
-
