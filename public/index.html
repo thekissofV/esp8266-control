@@ -43,7 +43,7 @@
 
         h1 { font-size: 1.5rem; margin: 0; }
         .pill { padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; border: 1px solid var(--border); }
-        .logout-btn { color: var(--red); text-decoration: none; font-size: 0.9rem; }
+        .logout-btn { color: var(--red); text-decoration: none; font-size: 0.9rem; font-weight: bold; }
 
         .card {
             background-color: var(--card-bg);
@@ -87,7 +87,7 @@
 
         button {
             flex: 1;
-            padding: 10px;
+            padding: 12px;
             border-radius: 6px;
             border: none;
             font-weight: bold;
@@ -117,13 +117,13 @@
         <a href="/logout" class="logout-btn">Logout</a>
     </header>
 
-    <!-- Node 2 Sensor Card -->
+    <!-- Node 2 Telemetry Display -->
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Hopper Level (Node 2)</span>
+            <span class="card-title">Hopper Level</span>
             <span id="sensorValueDisplay" class="status-badge" style="color: var(--accent);">-- cm</span>
         </div>
-        <div id="levelText" style="font-size: 0.85rem; color: var(--text-muted);">0% Full</div>
+        <div id="levelText" style="font-size: 0.85rem; color: var(--text-muted);">Monitoring hopper...</div>
         <div class="progress-bg">
             <div id="levelBar" class="progress-fill"></div>
         </div>
@@ -184,7 +184,6 @@
 <script>
     async function fetchState() {
         try {
-            // cache: 'no-store' forces browser to get fresh state every second
             const res = await fetch('/api/state', { cache: 'no-store' });
             if (res.status === 401) {
                 window.location.href = '/login.html';
@@ -192,56 +191,39 @@
             }
             const data = await res.json();
             
-            document.getElementById('connectionPill').innerText = 'Cloud Sync: Active';
-            document.getElementById('connectionPill').style.borderColor = '#10b981';
+            const pill = document.getElementById('connectionPill');
+            pill.innerText = 'Cloud Sync: Active';
+            pill.style.borderColor = '#10b981';
 
-            // Update Sensor Telemetry
-            const dist = data.node2Distance || 0;
-            document.getElementById('sensorValueDisplay').innerText = dist + ' cm';
-            
-            const isOverflow = (dist > 0 && dist <= 22);
-
-            // 1. System Power Status
+            // Relay Status Updates
             updateStatusText('status1', data.relay1, 'ONLINE', 'OFFLINE');
-
-            // Visually disable sub-system START buttons when System Power is OFF
-            document.getElementById('btnOn2').disabled = !data.relay1;
-            document.getElementById('btnOn3').disabled = !data.relay1;
-            document.getElementById('btnOn4').disabled = !data.relay1;
-
-            // 2. Main Motor Status (Detect Latched Overflow Trip)
-            const status2El = document.getElementById('status2');
-            if (isOverflow && !data.relay2) {
-                status2El.innerText = 'OVERFLOW TRIP (<=22cm)';
-                status2El.style.color = 'var(--red)';
-            } else {
-                updateStatusText('status2', data.relay2, 'RUNNING', 'STOPPED');
-            }
-
-            // 3. Drill Actuator Status
-            const status3El = document.getElementById('status3');
-            if (isOverflow && !data.relay3) {
-                status3El.innerText = 'OVERFLOW TRIP (<=22cm)';
-                status3El.style.color = 'var(--red)';
-            } else {
-                updateStatusText('status3', data.relay3, 'RUNNING', 'STOPPED');
-            }
-
-            // 4. Solenoid Valve Status
+            updateStatusText('status2', data.relay2, 'RUNNING', 'STOPPED');
+            updateStatusText('status3', data.relay3, 'RUNNING', 'STOPPED');
             updateStatusText('status4', data.relay4, 'OPEN', 'CLOSED');
 
-            // Progress Bar Fill Logic (Assuming 50 cm max bin depth)
-            let fillPercent = Math.max(0, Math.min(100, Math.round(((50 - dist) / 50) * 100)));
-            if (dist === 0) fillPercent = 0;
-            
+            // Distance Gauge Telemetry
+            const dist = data.node2Distance || 0;
+            const displayEl = document.getElementById('sensorValueDisplay');
+            const levelText = document.getElementById('levelText');
             const levelBar = document.getElementById('levelBar');
-            levelBar.style.width = fillPercent + '%';
-            levelBar.style.backgroundColor = isOverflow ? 'var(--red)' : 'var(--accent)';
-            document.getElementById('levelText').innerText = fillPercent + '% Full (' + dist + ' cm distance)';
+
+            if (dist > 0) {
+                displayEl.innerText = dist + ' cm';
+                let fillPercent = Math.max(0, Math.min(100, Math.round(((50 - dist) / 50) * 100)));
+                levelBar.style.width = fillPercent + '%';
+                levelText.innerText = fillPercent + '% Full (' + dist + ' cm)';
+                levelBar.style.backgroundColor = (dist <= 22) ? 'var(--red)' : 'var(--accent)';
+            } else {
+                displayEl.innerText = 'Active';
+                levelText.innerText = 'System Operational';
+                levelBar.style.width = '100%';
+                levelBar.style.backgroundColor = 'var(--accent)';
+            }
 
         } catch (err) {
-            document.getElementById('connectionPill').innerText = 'Cloud Sync: Error';
-            document.getElementById('connectionPill').style.borderColor = 'var(--red)';
+            const pill = document.getElementById('connectionPill');
+            pill.innerText = 'Cloud Sync: Reconnecting...';
+            pill.style.borderColor = 'var(--red)';
         }
     }
 
@@ -258,17 +240,23 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ relay, state })
             });
+            
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+
             const data = await res.json();
             if (!res.ok) {
-                alert(data.error || 'Operation failed');
+                alert(data.error || 'Operation rejected');
             }
             fetchState();
         } catch (err) {
-            alert('Failed to send command to server');
+            alert('Failed to communicate with Render server');
         }
     }
 
-    // Refresh dashboard state every 1 second
+    // Interval state polling
     setInterval(fetchState, 1000);
     fetchState();
 </script>
