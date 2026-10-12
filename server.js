@@ -8,14 +8,15 @@ const PORT = process.env.PORT || 10000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Relay States & Sensor Data
+// Relay States
 let relay1 = false; // System Power
 let relay2 = false; // Main Motor
 let relay3 = false; // Drill Actuator
 let relay4 = false; // Solenoid Water Valve
-let node2Distance = 0; // Secondary Ultrasonic Sensor (cm)
+let node2Distance = 0; // Sensor Telemetry
 
-const DEVICE_KEY = process.env.DEVICE_KEY;
+// Uses environment variable if present, or falls back to your ESP8266 code's key
+const DEVICE_KEY = process.env.DEVICE_KEY || "K8xP92mQ7vL4nT6zR3";
 
 const users = {
     Dwight: process.env.USER1_PASSWORD,
@@ -25,8 +26,7 @@ const users = {
     Kris: process.env.USER5_PASSWORD
 };
 
-// Store sessions with timestamp for expiration cleanup
-const sessions = new Map(); // token -> loginTimestamp
+const sessions = new Map();
 
 function loggedIn(req) {
     const cookie = req.headers.cookie || "";
@@ -36,7 +36,6 @@ function loggedIn(req) {
     const token = match[1];
     if (!sessions.has(token)) return false;
 
-    // Expire sessions older than 24 hours (86,400,000 ms)
     if (Date.now() - sessions.get(token) > 86400000) {
         sessions.delete(token);
         return false;
@@ -44,7 +43,7 @@ function loggedIn(req) {
     return true;
 }
 
-// 1. Explicit Routing to Protect index.html
+// Protected Root Route
 app.get("/", (req, res) => {
     if (!loggedIn(req)) {
         return res.redirect("/login.html");
@@ -52,10 +51,10 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// 2. Public Static Assets (Serves login.html, CSS, JS without auth)
+// Static Public Assets
 app.use(express.static("public"));
 
-// LOGIN ROUTE
+// Login Route
 app.post("/login", (req, res) => {
     const { username, password } = req.body;
     if (users[username] && password && password === users[username]) {
@@ -70,7 +69,7 @@ app.post("/login", (req, res) => {
     res.status(401).send("Invalid username or password");
 });
 
-// LOGOUT ROUTE
+// Logout Route
 app.get("/logout", (req, res) => {
     const cookie = req.headers.cookie || "";
     const match = cookie.match(/session=([^;]+)/);
@@ -84,7 +83,7 @@ app.get("/logout", (req, res) => {
     res.redirect("/login.html");
 });
 
-// GET RELAY STATE (Web UI) - Prevents Browser Caching
+// Get State Route
 app.get("/api/state", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
@@ -93,70 +92,52 @@ app.get("/api/state", (req, res) => {
     res.json({ relay1, relay2, relay3, relay4, node2Distance });
 });
 
-// CHANGE RELAY (Web Dashboard) WITH LATCHED SAFETY INTERLOCKS
+// Dashboard Web Commands
 app.post("/api/relay", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
     }
     const { relay, state } = req.body;
 
-    // 1. System Power Logic
     if (relay === 1) {
-        relay1 = state === true;
-        // AUTO-CUTOFF: Turning System Power OFF shuts down all equipment immediately
+        relay1 = (state === true);
         if (!relay1) {
-            relay2 = false; // Main Motor STOP
-            relay3 = false; // Drill Actuator STOP
-            relay4 = false; // Solenoid Valve CLOSE
+            relay2 = false;
+            relay3 = false;
+            relay4 = false;
         }
     } else {
-        // 2. POWER INTERLOCK: Block sub-systems if System Power is OFF
         if (!relay1 && state === true) {
             return res.status(400).json({ 
                 error: "Safety Interlock: System Power must be turned ON first!" 
             });
         }
 
-        // 3. OVERFLOW LOCKOUT: Block starting Motor/Drill if hopper is full (<= 22cm)
-        if ((relay === 2 || relay === 3) && state === true) {
-            if (node2Distance > 0 && node2Distance <= 22) {
-                return res.status(400).json({ 
-                    error: "Safety Lockout: Hopper level is 22cm or closer. Clear hopper first!" 
-                });
-            }
-        }
-
-        if (relay === 2) relay2 = state === true;
-        if (relay === 3) relay3 = state === true;
-        if (relay === 4) relay4 = state === true;
+        if (relay === 2) relay2 = (state === true);
+        if (relay === 3) relay3 = (state === true);
+        if (relay === 4) relay4 = (state === true);
     }
 
     res.json({ relay1, relay2, relay3, relay4, node2Distance });
 });
 
-// ESP8266 DEVICE POLLING / SYNC
+// ESP8266 Hardware Polling & Emergency Push Sync
 app.post("/api/device", (req, res) => {
     if (req.query.key !== DEVICE_KEY) {
         return res.status(401).json({ error: "Unauthorized" });
     }
     
-    // Receive telemetry from Node 2 or Node 1
-    if (req.body.node2Distance !== undefined) {
-        node2Distance = req.body.node2Distance;
+    // Updates cloud state when ESP8266 shuts off motor locally on 22cm trip
+    if (req.body.relay1 !== undefined) relay1 = req.body.relay1;
+    if (req.body.relay2 !== undefined) relay2 = req.body.relay2;
+    if (req.body.relay3 !== undefined) relay3 = req.body.relay3;
+    if (req.body.relay4 !== undefined) relay4 = req.body.relay4;
 
-        // LATCHED SAFETY TRIP: Force Main Motor & Drill OFF when distance <= 22 cm.
-        // It remains OFF even when distance clears, until manually turned back ON from dashboard.
-        if (node2Distance > 0 && node2Distance <= 22) {
-            relay2 = false; // Force Main Motor STOP
-            relay3 = false; // Force Drill Actuator STOP
-        }
-    }
-
-    // Always send back the authoritative server state to Node 1
+    // Send server state back to ESP8266
     res.json({ relay1, relay2, relay3, relay4 });
 });
 
-// HEALTH CHECK
+// Health Check
 app.get("/health", (req, res) => {
     res.send("ESP8266 Control Server is running!");
 });
