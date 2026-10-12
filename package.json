@@ -1,12 +1,12 @@
 {
   "name": "esp8266-control",
   "version": "1.0.0",
-  "description": "ESP8266 relay control server",
+  "description": "ESP8266 Macerator Control Backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "express": "^4.19.2"
   }
 }
