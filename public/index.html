@@ -1,335 +1,151 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Macerator Industrial Control Center</title>
-    <style>
-        :root {
-            --bg-main: #0f172a;
-            --card-bg: #1e293b;
-            --border-color: #334155;
-            --accent-green: #10b981;
-            --accent-green-hover: #059669;
-            --accent-red: #ef4444;
-            --accent-red-hover: #dc2626;
-            --text-muted: #94a3b8;
-            --text-light: #f8fafc;
+const express = require("express");
+const crypto = require("crypto");
+const path = require("path");
+
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Server Relay States & Telemetry
+let relay1 = false; // System Power
+let relay2 = false; // Main Motor
+let relay3 = false; // Drill Actuator
+let relay4 = false; // Solenoid Water Valve
+let node2Distance = 0; 
+
+// DEVICE_KEY with hardcoded fallback matching your ESP8266 firmware
+const DEVICE_KEY = process.env.DEVICE_KEY || "K8xP92mQ7vL4nT6zR3";
+
+// User credentials with default fallback ("1234") if Render env vars are absent
+const users = {
+    Dwight: process.env.USER1_PASSWORD || "1234",
+    Philip: process.env.USER2_PASSWORD || "1234",
+    Joaquin: process.env.USER3_PASSWORD || "1234",
+    Guest: process.env.USER4_PASSWORD || "1234",
+    Kris: process.env.USER5_PASSWORD || "1234"
+};
+
+const sessions = new Map();
+
+function loggedIn(req) {
+    const cookie = req.headers.cookie || "";
+    const match = cookie.match(/session=([^;]+)/);
+    if (!match) return false;
+    
+    const token = match[1];
+    if (!sessions.has(token)) return false;
+
+    if (Date.now() - sessions.get(token) > 86400000) {
+        sessions.delete(token);
+        return false;
+    }
+    return true;
+}
+
+// Protected Root Route
+app.get("/", (req, res) => {
+    if (!loggedIn(req)) {
+        return res.redirect("/login.html");
+    }
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// Static Public Folder
+app.use(express.static("public"));
+
+// Login Route
+app.post("/login", (req, res) => {
+    const { username, password } = req.body;
+    if (users[username] && password && password === users[username]) {
+        const token = crypto.randomBytes(32).toString("hex");
+        sessions.set(token, Date.now());
+        res.setHeader(
+            "Set-Cookie",
+            `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/`
+        );
+        return res.redirect("/");
+    }
+    res.status(401).send("Invalid username or password");
+});
+
+// Logout Route
+app.get("/logout", (req, res) => {
+    const cookie = req.headers.cookie || "";
+    const match = cookie.match(/session=([^;]+)/);
+    if (match) {
+        sessions.delete(match[1]);
+    }
+    res.setHeader(
+        "Set-Cookie",
+        "session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0"
+    );
+    res.redirect("/login.html");
+});
+
+// Get Current State (Web Dashboard)
+app.get("/api/state", (req, res) => {
+    if (!loggedIn(req)) {
+        return res.status(401).json({ error: "Not logged in" });
+    }
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.json({ relay1, relay2, relay3, relay4, node2Distance });
+});
+
+// Control Relays (Web Dashboard)
+app.post("/api/relay", (req, res) => {
+    if (!loggedIn(req)) {
+        return res.status(401).json({ error: "Not logged in" });
+    }
+    const { relay, state } = req.body;
+
+    if (relay === 1) {
+        relay1 = (state === true);
+        if (!relay1) {
+            relay2 = false;
+            relay3 = false;
+            relay4 = false;
         }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg-main);
-            color: var(--text-light);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
+    } else {
+        if (!relay1 && state === true) {
+            return res.status(400).json({ error: "Safety Interlock: System Power must be turned ON first!" });
         }
+        if (relay === 2) relay2 = (state === true);
+        if (relay === 3) relay3 = (state === true);
+        if (relay === 4) relay4 = (state === true);
+    }
 
-        header {
-            text-align: center;
-            margin-bottom: 25px;
-        }
+    res.json({ relay1, relay2, relay3, relay4, node2Distance });
+});
 
-        h1 {
-            margin: 0 0 5px 0;
-            font-size: 26px;
-            letter-spacing: 0.5px;
-        }
+// ESP8266 Hardware Sync & Polling Route
+app.post("/api/device", (req, res) => {
+    if (req.query.key && req.query.key !== DEVICE_KEY) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    // Read distance telemetry if pushed by hardware
+    if (req.body.node2Distance !== undefined) {
+        node2Distance = req.body.node2Distance;
+    } else if (req.body.rawDistanceCm !== undefined) {
+        node2Distance = req.body.rawDistanceCm;
+    }
 
-        .system-status-pill {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-            background: #1e293b;
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-        }
+    // Read relay state updates pushed by ESP8266 local automation
+    if (req.body.relay1 !== undefined) relay1 = req.body.relay1;
+    if (req.body.relay2 !== undefined) relay2 = req.body.relay2;
+    if (req.body.relay3 !== undefined) relay3 = req.body.relay3;
+    if (req.body.relay4 !== undefined) relay4 = req.body.relay4;
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            width: 100%;
-            max-width: 900px;
-        }
+    res.json({ relay1, relay2, relay3, relay4 });
+});
 
-        .card {
-            background: var(--card-bg);
-            padding: 22px;
-            border-radius: 14px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-            border: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
+// Health Check
+app.get("/health", (req, res) => {
+    res.send("ESP8266 Control Server is running!");
+});
 
-        .card h3 {
-            margin: 0 0 10px 0;
-            color: var(--text-muted);
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .status-display {
-            font-size: 22px;
-            font-weight: bold;
-            margin: 10px 0 20px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #64748b;
-        }
-
-        .status-on { color: var(--accent-green); }
-        .status-on .status-dot { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
-        
-        .status-off { color: #64748b; }
-        .status-off .status-dot { background: #64748b; }
-
-        .btn-group {
-            display: flex;
-            gap: 10px;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 12px;
-            font-weight: bold;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-            font-size: 14px;
-        }
-
-        .btn:active { transform: scale(0.98); }
-        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
-        .btn-on { background: var(--accent-green); color: white; }
-        .btn-on:hover { background: var(--accent-green-hover); }
-        .btn-off { background: var(--accent-red); color: white; }
-        .btn-off:hover { background: var(--accent-red-hover); }
-
-        .sensor-card { grid-column: 1 / -1; }
-        .level-container {
-            background: #0f172a;
-            border-radius: 8px;
-            height: 24px;
-            width: 100%;
-            overflow: hidden;
-            border: 1px solid var(--border-color);
-            margin-top: 10px;
-            position: relative;
-        }
-
-        .level-bar {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--accent-green), #3b82f6);
-            transition: width 0.5s ease-in-out;
-        }
-
-        .level-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 12px;
-            font-weight: bold;
-            color: white;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-        }
-
-        .logout-btn {
-            margin-top: 30px;
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 14px;
-            padding: 8px 16px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            transition: all 0.2s;
-        }
-
-        .logout-btn:hover {
-            color: var(--text-light);
-            background: var(--card-bg);
-        }
-    </style>
-</head>
-<body>
-
-    <header>
-        <h1>Macerator Control Center</h1>
-        <div id="connectionPill" class="system-status-pill">Connecting to Render...</div>
-    </header>
-
-    <div class="grid">
-        <!-- Node 2 Sensor Card -->
-        <div class="card sensor-card">
-            <h3>Node 2: Secondary Ultrasonic Sensor (Hopper Level)</h3>
-            <div class="status-display">
-                <span id="sensorValue">0</span> <span style="font-size: 16px; color: var(--text-muted);">cm distance</span>
-            </div>
-            <div class="level-container">
-                <div id="levelBar" class="level-bar"></div>
-                <div id="levelText" class="level-text">0% Capacity</div>
-            </div>
-        </div>
-
-        <!-- Relay 1: System Power -->
-        <div class="card">
-            <h3>System Power</h3>
-            <div id="status1" class="status-display status-off">
-                <span class="status-dot"></span><span class="text">OFFLINE</span>
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-on" onclick="setRelay(1, true)">POWER ON</button>
-                <button class="btn btn-off" onclick="setRelay(1, false)">POWER OFF</button>
-            </div>
-        </div>
-
-        <!-- Relay 2: Main Motor -->
-        <div class="card">
-            <h3>Main Motor</h3>
-            <div id="status2" class="status-display status-off">
-                <span class="status-dot"></span><span class="text">STOPPED</span>
-            </div>
-            <div class="btn-group">
-                <button id="btnOn2" class="btn btn-on" onclick="setRelay(2, true)">START</button>
-                <button class="btn btn-off" onclick="setRelay(2, false)">STOP</button>
-            </div>
-        </div>
-
-        <!-- Relay 3: Drill Actuator -->
-        <div class="card">
-            <h3>Drill Actuator</h3>
-            <div id="status3" class="status-display status-off">
-                <span class="status-dot"></span><span class="text">STOPPED</span>
-            </div>
-            <div class="btn-group">
-                <button id="btnOn3" class="btn btn-on" onclick="setRelay(3, true)">START</button>
-                <button class="btn btn-off" onclick="setRelay(3, false)">STOP</button>
-            </div>
-        </div>
-
-        <!-- Relay 4: Solenoid Water Valve -->
-        <div class="card">
-            <h3>Solenoid Valve</h3>
-            <div id="status4" class="status-display status-off">
-                <span class="status-dot"></span><span class="text">CLOSED</span>
-            </div>
-            <div class="btn-group">
-                <button id="btnOn4" class="btn btn-on" onclick="setRelay(4, true)">OPEN</button>
-                <button class="btn btn-off" onclick="setRelay(4, false)">CLOSE</button>
-            </div>
-        </div>
-    </div>
-
-    <a href="/logout" class="logout-btn">Logout</a>
-
-    <script>
-        const MAX_TANK_DEPTH_CM = 50;
-
-        async function fetchState() {
-            try {
-                const res = await fetch('/api/state', { cache: 'no-store' });
-                if (res.status === 401) {
-                    window.location.href = '/login.html';
-                    return;
-                }
-                const data = await res.json();
-                
-                const pill = document.getElementById('connectionPill');
-                pill.innerText = 'Cloud Sync: Active';
-                pill.style.borderColor = '#10b981';
-
-                const dist = data.node2Distance || 0;
-                const isOverflow = (dist > 0 && dist <= 22);
-
-                updateUI('status1', data.relay1, 'ONLINE', 'OFFLINE');
-
-                // Disable START buttons visually when System Power is OFF or Bin is Full
-                document.getElementById('btnOn2').disabled = !data.relay1 || isOverflow;
-                document.getElementById('btnOn3').disabled = !data.relay1;
-                document.getElementById('btnOn4').disabled = !data.relay1;
-
-                // Motor status with overflow warning
-                const status2El = document.getElementById('status2');
-                if (isOverflow && !data.relay2) {
-                    status2El.querySelector('.text').innerText = 'OVERFLOW TRIP (<=22cm)';
-                    status2El.className = 'status-display status-off';
-                    status2El.style.color = 'var(--accent-red)';
-                } else {
-                    status2El.style.color = '';
-                    updateUI('status2', data.relay2, 'RUNNING', 'STOPPED');
-                }
-
-                updateUI('status3', data.relay3, 'RUNNING', 'STOPPED');
-                updateUI('status4', data.relay4, 'OPEN', 'CLOSED');
-
-                // Sensor Level Display
-                document.getElementById('sensorValue').innerText = dist;
-                let fillPercent = Math.max(0, Math.min(100, Math.round(((MAX_TANK_DEPTH_CM - dist) / MAX_TANK_DEPTH_CM) * 100)));
-                if (dist === 0) fillPercent = 0;
-
-                const levelBar = document.getElementById('levelBar');
-                levelBar.style.width = fillPercent + '%';
-                levelBar.style.background = isOverflow ? 'var(--accent-red)' : 'linear-gradient(90deg, var(--accent-green), #3b82f6)';
-                document.getElementById('levelText').innerText = fillPercent + '% Full (' + dist + ' cm)';
-
-            } catch (err) {
-                const pill = document.getElementById('connectionPill');
-                pill.innerText = 'Cloud Sync: Error';
-                pill.style.borderColor = 'var(--accent-red)';
-            }
-        }
-
-        function updateUI(elementId, state, onText, offText) {
-            const el = document.getElementById(elementId);
-            const textSpan = el.querySelector('.text');
-            textSpan.innerText = state ? onText : offText;
-            el.className = 'status-display ' + (state ? 'status-on' : 'status-off');
-        }
-
-        async function setRelay(relay, state) {
-            try {
-                const res = await fetch('/api/relay', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ relay, state })
-                });
-
-                if (res.status === 401) {
-                    window.location.href = '/login.html';
-                    return;
-                }
-
-                const data = await res.json();
-                if (!res.ok) {
-                    alert(data.error || 'Operation failed');
-                }
-                fetchState();
-            } catch (err) {
-                alert('Failed to send command to server');
-            }
-        }
-
-        setInterval(fetchState, 1000);
-        fetchState();
-    </script>
-</body>
-</html>
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+});
