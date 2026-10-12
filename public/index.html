@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Macerator Control Center</title>
+    <title>Macerator Industrial Control Center</title>
     <style>
         :root {
             --bg-main: #0f172a;
@@ -34,7 +34,11 @@
             margin-bottom: 25px;
         }
 
-        h1 { margin: 0 0 5px 0; font-size: 26px; }
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 26px;
+            letter-spacing: 0.5px;
+        }
 
         .system-status-pill {
             display: inline-block;
@@ -71,6 +75,7 @@
             color: var(--text-muted);
             font-size: 14px;
             text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .status-display {
@@ -91,10 +96,14 @@
 
         .status-on { color: var(--accent-green); }
         .status-on .status-dot { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        
         .status-off { color: #64748b; }
         .status-off .status-dot { background: #64748b; }
 
-        .btn-group { display: flex; gap: 10px; }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
 
         .btn {
             flex: 1;
@@ -103,12 +112,16 @@
             border-radius: 8px;
             border: none;
             cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
             font-size: 14px;
         }
 
+        .btn:active { transform: scale(0.98); }
         .btn:disabled { opacity: 0.3; cursor: not-allowed; }
         .btn-on { background: var(--accent-green); color: white; }
+        .btn-on:hover { background: var(--accent-green-hover); }
         .btn-off { background: var(--accent-red); color: white; }
+        .btn-off:hover { background: var(--accent-red-hover); }
 
         .sensor-card { grid-column: 1 / -1; }
         .level-container {
@@ -148,6 +161,12 @@
             padding: 8px 16px;
             border: 1px solid var(--border-color);
             border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            color: var(--text-light);
+            background: var(--card-bg);
         }
     </style>
 </head>
@@ -243,6 +262,7 @@
                 updateUI('status3', data.relay3, 'RUNNING', 'STOPPED');
                 updateUI('status4', data.relay4, 'OPEN', 'CLOSED');
 
+                // Disable sub-system START buttons when System Power is OFF
                 document.getElementById('btnOn2').disabled = !data.relay1;
                 document.getElementById('btnOn3').disabled = !data.relay1;
                 document.getElementById('btnOn4').disabled = !data.relay1;
