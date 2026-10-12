@@ -117,13 +117,13 @@
         <a href="/logout" class="logout-btn">Logout</a>
     </header>
 
-    <!-- Node 2 Telemetry Display -->
+    <!-- Hopper Level Sensor Card -->
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Hopper Level</span>
+            <span class="card-title">Hopper Level (Node 2)</span>
             <span id="sensorValueDisplay" class="status-badge" style="color: var(--accent);">-- cm</span>
         </div>
-        <div id="levelText" style="font-size: 0.85rem; color: var(--text-muted);">Monitoring hopper...</div>
+        <div id="levelText" style="font-size: 0.85rem; color: var(--text-muted);">Monitoring level...</div>
         <div class="progress-bg">
             <div id="levelBar" class="progress-fill"></div>
         </div>
@@ -195,14 +195,30 @@
             pill.innerText = 'Cloud Sync: Active';
             pill.style.borderColor = '#10b981';
 
-            // Relay Status Updates
+            const dist = data.node2Distance || 0;
+            const isOverflow = (dist > 0 && dist <= 22);
+
+            // System Power Status
             updateStatusText('status1', data.relay1, 'ONLINE', 'OFFLINE');
-            updateStatusText('status2', data.relay2, 'RUNNING', 'STOPPED');
+
+            // Disable sub-system START buttons when Power is OFF or Bin is Full
+            document.getElementById('btnOn2').disabled = !data.relay1 || isOverflow;
+            document.getElementById('btnOn3').disabled = !data.relay1;
+            document.getElementById('btnOn4').disabled = !data.relay1;
+
+            // Main Motor Status
+            const status2El = document.getElementById('status2');
+            if (isOverflow && !data.relay2) {
+                status2El.innerText = 'OVERFLOW TRIP (<=22cm)';
+                status2El.style.color = 'var(--red)';
+            } else {
+                updateStatusText('status2', data.relay2, 'RUNNING', 'STOPPED');
+            }
+
             updateStatusText('status3', data.relay3, 'RUNNING', 'STOPPED');
             updateStatusText('status4', data.relay4, 'OPEN', 'CLOSED');
 
-            // Distance Gauge Telemetry
-            const dist = data.node2Distance || 0;
+            // Distance Gauge Bar
             const displayEl = document.getElementById('sensorValueDisplay');
             const levelText = document.getElementById('levelText');
             const levelBar = document.getElementById('levelBar');
@@ -211,18 +227,17 @@
                 displayEl.innerText = dist + ' cm';
                 let fillPercent = Math.max(0, Math.min(100, Math.round(((50 - dist) / 50) * 100)));
                 levelBar.style.width = fillPercent + '%';
-                levelText.innerText = fillPercent + '% Full (' + dist + ' cm)';
-                levelBar.style.backgroundColor = (dist <= 22) ? 'var(--red)' : 'var(--accent)';
+                levelText.innerText = fillPercent + '% Full (' + dist + ' cm distance)';
+                levelBar.style.backgroundColor = isOverflow ? 'var(--red)' : 'var(--accent)';
             } else {
-                displayEl.innerText = 'Active';
-                levelText.innerText = 'System Operational';
-                levelBar.style.width = '100%';
-                levelBar.style.backgroundColor = 'var(--accent)';
+                displayEl.innerText = '-- cm';
+                levelText.innerText = 'Awaiting Telemetry...';
+                levelBar.style.width = '0%';
             }
 
         } catch (err) {
             const pill = document.getElementById('connectionPill');
-            pill.innerText = 'Cloud Sync: Reconnecting...';
+            pill.innerText = 'Cloud Sync: Error';
             pill.style.borderColor = 'var(--red)';
         }
     }
@@ -240,23 +255,20 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ relay, state })
             });
-            
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-
             const data = await res.json();
             if (!res.ok) {
-                alert(data.error || 'Operation rejected');
+                alert(data.error || 'Operation failed');
             }
             fetchState();
         } catch (err) {
-            alert('Failed to communicate with Render server');
+            alert('Failed to send command to server');
         }
     }
 
-    // Interval state polling
     setInterval(fetchState, 1000);
     fetchState();
 </script>
