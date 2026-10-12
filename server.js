@@ -8,17 +8,17 @@ const PORT = process.env.PORT || 10000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Relay States & Sensor Telemetry
+// Server Relay States & Telemetry
 let relay1 = false; // System Power
 let relay2 = false; // Main Motor
 let relay3 = false; // Drill Actuator
 let relay4 = false; // Solenoid Water Valve
-let node2Distance = 0; // Ultrasonic Sensor (cm)
+let node2Distance = 0; 
 
-// DEVICE_KEY with hardcoded fallback matching ESP8266 code
+// DEVICE_KEY with hardcoded fallback matching your ESP8266 firmware
 const DEVICE_KEY = process.env.DEVICE_KEY || "K8xP92mQ7vL4nT6zR3";
 
-// User database with default password fallbacks ("1234")
+// User credentials with default fallback ("1234") if Render env vars are absent
 const users = {
     Dwight: process.env.USER1_PASSWORD || "1234",
     Philip: process.env.USER2_PASSWORD || "1234",
@@ -27,7 +27,6 @@ const users = {
     Kris: process.env.USER5_PASSWORD || "1234"
 };
 
-// In-memory active user sessions
 const sessions = new Map();
 
 function loggedIn(req) {
@@ -38,7 +37,6 @@ function loggedIn(req) {
     const token = match[1];
     if (!sessions.has(token)) return false;
 
-    // Expire session tokens older than 24 hours
     if (Date.now() - sessions.get(token) > 86400000) {
         sessions.delete(token);
         return false;
@@ -46,7 +44,7 @@ function loggedIn(req) {
     return true;
 }
 
-// 1. Protected Root Route
+// Protected Root Route
 app.get("/", (req, res) => {
     if (!loggedIn(req)) {
         return res.redirect("/login.html");
@@ -54,10 +52,10 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// 2. Serve Static Files (login.html, CSS, JS)
+// Static Public Folder
 app.use(express.static("public"));
 
-// LOGIN ROUTE
+// Login Route
 app.post("/login", (req, res) => {
     const { username, password } = req.body;
     if (users[username] && password && password === users[username]) {
@@ -72,7 +70,7 @@ app.post("/login", (req, res) => {
     res.status(401).send("Invalid username or password");
 });
 
-// LOGOUT ROUTE
+// Logout Route
 app.get("/logout", (req, res) => {
     const cookie = req.headers.cookie || "";
     const match = cookie.match(/session=([^;]+)/);
@@ -86,7 +84,7 @@ app.get("/logout", (req, res) => {
     res.redirect("/login.html");
 });
 
-// GET RELAY STATE (Web UI)
+// Get Current State (Web Dashboard)
 app.get("/api/state", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
@@ -95,7 +93,7 @@ app.get("/api/state", (req, res) => {
     res.json({ relay1, relay2, relay3, relay4, node2Distance });
 });
 
-// CHANGE RELAY (Web Dashboard)
+// Control Relays (Web Dashboard)
 app.post("/api/relay", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
@@ -105,22 +103,13 @@ app.post("/api/relay", (req, res) => {
     if (relay === 1) {
         relay1 = (state === true);
         if (!relay1) {
-            relay2 = false; // Main Motor STOP
-            relay3 = false; // Drill Actuator STOP
-            relay4 = false; // Solenoid Valve CLOSE
+            relay2 = false;
+            relay3 = false;
+            relay4 = false;
         }
     } else {
         if (!relay1 && state === true) {
-            return res.status(400).json({ 
-                error: "Safety Interlock: System Power must be turned ON first!" 
-            });
-        }
-        if (relay === 2 && state === true) {
-            if (node2Distance > 0 && node2Distance <= 22) {
-                return res.status(400).json({ 
-                    error: "Safety Lockout: Hopper level is 22cm or closer. Clear hopper first!" 
-                });
-            }
+            return res.status(400).json({ error: "Safety Interlock: System Power must be turned ON first!" });
         }
         if (relay === 2) relay2 = (state === true);
         if (relay === 3) relay3 = (state === true);
@@ -130,34 +119,29 @@ app.post("/api/relay", (req, res) => {
     res.json({ relay1, relay2, relay3, relay4, node2Distance });
 });
 
-// ESP8266 HARDWARE POLLING & SYNC
+// ESP8266 Hardware Sync & Polling Route
 app.post("/api/device", (req, res) => {
     if (req.query.key && req.query.key !== DEVICE_KEY) {
         return res.status(401).json({ error: "Unauthorized" });
     }
     
-    // 1. Telemetry updates
+    // Read distance telemetry if pushed by hardware
     if (req.body.node2Distance !== undefined) {
         node2Distance = req.body.node2Distance;
     } else if (req.body.rawDistanceCm !== undefined) {
         node2Distance = req.body.rawDistanceCm;
     }
 
-    // 2. State updates pushed from ESP8266 local automation
+    // Read relay state updates pushed by ESP8266 local automation
     if (req.body.relay1 !== undefined) relay1 = req.body.relay1;
     if (req.body.relay2 !== undefined) relay2 = req.body.relay2;
     if (req.body.relay3 !== undefined) relay3 = req.body.relay3;
     if (req.body.relay4 !== undefined) relay4 = req.body.relay4;
 
-    // 3. LATCHED OVERFLOW TRIP: Force Motor OFF if hopper <= 22cm
-    if (node2Distance > 0 && node2Distance <= 22) {
-        relay2 = false;
-    }
-
     res.json({ relay1, relay2, relay3, relay4 });
 });
 
-// HEALTH CHECK
+// Health Check
 app.get("/health", (req, res) => {
     res.send("ESP8266 Control Server is running!");
 });
