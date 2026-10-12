@@ -13,7 +13,7 @@ let relay1 = false; // System Power
 let relay2 = false; // Main Motor
 let relay3 = false; // Drill Actuator
 let relay4 = false; // Solenoid Water Valve
-let node2Distance = 0; // Secondary Ultrasonic Sensor
+let node2Distance = 0; // Secondary Ultrasonic Sensor (cm)
 
 const DEVICE_KEY = process.env.DEVICE_KEY;
 
@@ -84,37 +84,48 @@ app.get("/logout", (req, res) => {
     res.redirect("/login.html");
 });
 
-// GET RELAY STATE (Web UI)
+// GET RELAY STATE (Web UI) - Prevents Browser Caching
 app.get("/api/state", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
     }
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     res.json({ relay1, relay2, relay3, relay4, node2Distance });
 });
 
-// CHANGE RELAY (Web UI) WITH SAFETY INTERLOCK
+// CHANGE RELAY (Web Dashboard) WITH LATCHED SAFETY INTERLOCKS
 app.post("/api/relay", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
     }
     const { relay, state } = req.body;
 
-    // Relay 1: System Power Logic
+    // 1. System Power Logic
     if (relay === 1) {
         relay1 = state === true;
-        // AUTO-CUTOFF: Turning System Power OFF shuts down all motors/valves immediately
+        // AUTO-CUTOFF: Turning System Power OFF shuts down all equipment immediately
         if (!relay1) {
             relay2 = false; // Main Motor STOP
             relay3 = false; // Drill Actuator STOP
             relay4 = false; // Solenoid Valve CLOSE
         }
     } else {
-        // SAFETY INTERLOCK: Reject turning ON motor/actuator/valve if System Power is OFF
+        // 2. POWER INTERLOCK: Block sub-systems if System Power is OFF
         if (!relay1 && state === true) {
             return res.status(400).json({ 
                 error: "Safety Interlock: System Power must be turned ON first!" 
             });
         }
+
+        // 3. OVERFLOW LOCKOUT: Block starting Motor/Drill if hopper is full (<= 22cm)
+        if ((relay === 2 || relay === 3) && state === true) {
+            if (node2Distance > 0 && node2Distance <= 22) {
+                return res.status(400).json({ 
+                    error: "Safety Lockout: Hopper level is 22cm or closer. Clear hopper first!" 
+                });
+            }
+        }
+
         if (relay === 2) relay2 = state === true;
         if (relay === 3) relay3 = state === true;
         if (relay === 4) relay4 = state === true;
@@ -129,11 +140,19 @@ app.post("/api/device", (req, res) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
     
-    // Accept optional sensor updates from ESP8266
+    // Receive telemetry from Node 2 or Node 1
     if (req.body.node2Distance !== undefined) {
         node2Distance = req.body.node2Distance;
+
+        // LATCHED SAFETY TRIP: Force Main Motor & Drill OFF when distance <= 22 cm.
+        // It remains OFF even when distance clears, until manually turned back ON from dashboard.
+        if (node2Distance > 0 && node2Distance <= 22) {
+            relay2 = false; // Force Main Motor STOP
+            relay3 = false; // Force Drill Actuator STOP
+        }
     }
 
+    // Always send back the authoritative server state to Node 1
     res.json({ relay1, relay2, relay3, relay4 });
 });
 
