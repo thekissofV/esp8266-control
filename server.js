@@ -16,6 +16,8 @@ let relay2 = false; // Main Motor
 let relay3 = false; // Drill Actuator
 let relay4 = false; // Solenoid Water Valve
 let node2Distance = 0; 
+let paperWhite = false; // IR Sensor Color Detection (true = WHITE, false = BLACK)
+let irColor = "BLACK";
 
 // Timer reference for 15s Solenoid delay
 let solenoidTimer = null;
@@ -120,15 +122,16 @@ app.get("/logout", (req, res) => {
     res.redirect("/login.html");
 });
 
+// GET Current System State for Web Front-End
 app.get("/api/state", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
     }
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
-    res.json({ relay1, relay2, relay3, relay4, node2Distance });
+    res.json({ relay1, relay2, relay3, relay4, node2Distance, paperWhite, irColor });
 });
 
-// CHANGE RELAY (Web Dashboard Commands)
+// CHANGE RELAY (Web Dashboard Manual Commands)
 app.post("/api/relay", (req, res) => {
     if (!loggedIn(req)) {
         return res.status(401).json({ error: "Not logged in" });
@@ -164,7 +167,7 @@ app.post("/api/relay", (req, res) => {
         if (relay === 4) relay4 = (state === true);
     }
 
-    res.json({ relay1, relay2, relay3, relay4, node2Distance });
+    res.json({ relay1, relay2, relay3, relay4, node2Distance, paperWhite, irColor });
 });
 
 // ESP8266 DEVICE POLLING & AUTOMATED WORKFLOW
@@ -185,6 +188,10 @@ app.post("/api/device", (req, res) => {
         if (req.body.node2Distance !== undefined) node2Distance = req.body.node2Distance;
         if (req.body.rawDistanceCm !== undefined) node2Distance = req.body.rawDistanceCm;
 
+        // Capture IR Color Telemetry from Node 2 / Node 1
+        if (typeof req.body.paperWhite === 'boolean') paperWhite = req.body.paperWhite;
+        if (typeof req.body.irColor === 'string') irColor = req.body.irColor;
+
         // AUTOMATION TRIGGER: If Motor was RUNNING and stopped locally by ESP8266 (<=22cm)
         if (wasMotorRunning && !relay2 && relay1) {
             sendPushover("Macerator Alert", "Paper Bin FULL (22cm)! Motor stopped. Solenoid opening in 15 seconds.");
@@ -201,7 +208,7 @@ app.post("/api/device", (req, res) => {
         }
     }
 
-    res.json({ relay1, relay2, relay3, relay4 });
+    res.json({ relay1, relay2, relay3, relay4, paperWhite });
 });
 
 app.get("/health", (req, res) => {
