@@ -19,8 +19,8 @@ let node2Distance = 0;
 let paperWhite = false; // IR Sensor Color Detection (true = WHITE, false = BLACK)
 let irColor = "BLACK";
 
-// Timer reference for 15s Solenoid delay
-let solenoidTimer = null;
+// Track Bin Full Notification State to prevent alert spamming
+let isBinFullNotified = false;
 
 // Pushover Credentials
 const PUSHOVER_USER_KEY = process.env.PUSHOVER_USER_KEY || "u87wdpc6rv1yp4cdzx8tepvd3hptwk";
@@ -148,7 +148,6 @@ app.post("/api/relay", (req, res) => {
             relay2 = false;
             relay3 = false;
             relay4 = false;
-            if (solenoidTimer) { clearTimeout(solenoidTimer); solenoidTimer = null; }
         }
     } else {
         if (!relay1 && state === true) {
@@ -160,11 +159,23 @@ app.post("/api/relay", (req, res) => {
             const oldState = relay2;
             relay2 = (state === true);
             if (oldState !== relay2) {
-                sendPushover("Macerator Alert", relay2 ? "MAIN MOTOR RUNNING!" : "Main Motor STOPPED.");
+                sendPushover("⚙️ Macerator Motor Alert", relay2 ? "Main Shredder Motor STARTED!" : "Main Shredder Motor STOPPED.");
             }
         }
-        if (relay === 3) relay3 = (state === true);
-        if (relay === 4) relay4 = (state === true);
+        if (relay === 3) {
+            const oldState = relay3;
+            relay3 = (state === true);
+            if (oldState !== relay3) {
+                sendPushover("🌀 Drill Actuator Alert", relay3 ? "Drill Actuator STARTED!" : "Drill Actuator STOPPED.");
+            }
+        }
+        if (relay === 4) {
+            const oldState = relay4;
+            relay4 = (state === true);
+            if (oldState !== relay4) {
+                sendPushover("💧 Solenoid Valve Alert", relay4 ? "Solenoid Water Valve OPENED!" : "Solenoid Water Valve CLOSED.");
+            }
+        }
     }
 
     res.json({ relay1, relay2, relay3, relay4, node2Distance, paperWhite, irColor });
@@ -178,7 +189,9 @@ app.post("/api/device", (req, res) => {
     }
     
     if (req.body && typeof req.body === 'object') {
-        const wasMotorRunning = relay2;
+        const prevMotorState    = relay2;
+        const prevSolenoidState = relay4;
+        const prevDrillState    = relay3;
 
         if (typeof req.body.relay1 === 'boolean') relay1 = req.body.relay1;
         if (typeof req.body.relay2 === 'boolean') relay2 = req.body.relay2;
@@ -192,19 +205,41 @@ app.post("/api/device", (req, res) => {
         if (typeof req.body.paperWhite === 'boolean') paperWhite = req.body.paperWhite;
         if (typeof req.body.irColor === 'string') irColor = req.body.irColor;
 
-        // AUTOMATION TRIGGER: If Motor was RUNNING and stopped locally by ESP8266 (<=22cm)
-        if (wasMotorRunning && !relay2 && relay1) {
-            sendPushover("Macerator Alert", "Paper Bin FULL (22cm)! Motor stopped. Solenoid opening in 15 seconds.");
+        // 1. AUTOMATIC MOTOR START / STOP NOTIFICATIONS (Hardware driven via Node 2 Feeder)
+        if (prevMotorState !== relay2) {
+            if (relay2) {
+                sendPushover("⚙️ Macerator Motor Alert", "Main Shredder Motor STARTED automatically!");
+            } else {
+                sendPushover("🛑 Macerator Motor Alert", "Main Shredder Motor STOPPED!");
+            }
+        }
 
-            if (solenoidTimer) clearTimeout(solenoidTimer);
-            
-            solenoidTimer = setTimeout(() => {
-                if (relay1) {
-                    relay4 = true; // Open Solenoid Valve
-                    sendPushover("Macerator Alert", "15s Delay passed. Solenoid Valve OPENED to fill water.");
-                }
-                solenoidTimer = null;
-            }, 15000);
+        // 2. SOLENOID VALVE NOTIFICATIONS
+        if (prevSolenoidState !== relay4) {
+            if (relay4) {
+                sendPushover("💧 Solenoid Valve Alert", "Solenoid Water Valve OPENED!");
+            } else {
+                sendPushover("🔒 Solenoid Valve Alert", "Solenoid Water Valve CLOSED!");
+            }
+        }
+
+        // 3. DRILL ACTUATOR NOTIFICATIONS
+        if (prevDrillState !== relay3) {
+            if (relay3) {
+                sendPushover("🌀 Drill Actuator Alert", "Drill Actuator STARTED!");
+            } else {
+                sendPushover("⏹️ Drill Actuator Alert", "Drill Actuator STOPPED!");
+            }
+        }
+
+        // 4. BIN FULL ALERT AT EXACTLY 33CM OR CLOSER
+        if (node2Distance > 0 && node2Distance <= 33) {
+            if (!isBinFullNotified) {
+                isBinFullNotified = true;
+                sendPushover("⚠️ Bin Full Alert!", `Paper bin reached full limit: ${node2Distance} cm (33cm or closer)!`);
+            }
+        } else if (node2Distance > 33) {
+            isBinFullNotified = false; // Reset notification flag once bin is emptied
         }
     }
 
