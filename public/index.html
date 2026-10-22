@@ -237,6 +237,15 @@
                 <button class="btn btn-off" onclick="setRelay(4, false)">CLOSE</button>
             </div>
         </div>
+
+        <!-- Node 2: Paper Feeder Telemetry Card -->
+        <div class="card">
+            <h3>Node 2 Feeder Status</h3>
+            <div id="feederStatus" class="status-display status-off">
+                <span class="status-dot"></span><span class="text">IDLE / NO PAPER</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted);" id="paperSensorText">Paper Sensor: IDLE</div>
+        </div>
     </div>
 
     <a href="/logout" class="logout-btn">Logout</a>
@@ -262,6 +271,10 @@
                 updateUI('status3', data.relay3, 'RUNNING', 'STOPPED');
                 updateUI('status4', data.relay4, 'OPEN', 'CLOSED');
 
+                // Update Node 2 Feeder Telemetry Display
+                updateUI('feederStatus', data.feederActive, 'FEEDING PAPER', 'IDLE / STOPPED');
+                document.getElementById('paperSensorText').innerText = 'Paper Sensor (D5): ' + (data.paperDetected || data.paperWhite ? 'PAPER DETECTED' : 'NO PAPER');
+
                 // Disable sub-system START buttons when System Power is OFF
                 document.getElementById('btnOn2').disabled = !data.relay1;
                 document.getElementById('btnOn3').disabled = !data.relay1;
@@ -286,8 +299,9 @@
 
         function updateUI(elementId, state, onText, offText) {
             const el = document.getElementById(elementId);
+            if (!el) return;
             const textSpan = el.querySelector('.text');
-            textSpan.innerText = state ? onText : offText;
+            if (textSpan) textSpan.innerText = state ? onText : offText;
             el.className = 'status-display ' + (state ? 'status-on' : 'status-off');
         }
 
