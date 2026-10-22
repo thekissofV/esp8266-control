@@ -10,26 +10,27 @@ const PORT = process.env.PORT || 10000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Relay States & Telemetry
-let relay1 = false; // System Power
-let relay2 = false; // Main Motor
-let relay3 = false; // Drill Actuator
-let relay4 = false; // Solenoid Water Valve
-let node2Distance = 0; 
-let paperWhite = false; // IR Sensor Color Detection (true = WHITE, false = BLACK)
-let irColor = "BLACK";
+// ==========================================
+// SYSTEM TELEMETRY & STATE VARIABLES
+// ==========================================
+let relay1 = true;         // System Power (D1)
+let relay2 = false;        // Main Shredder Motor (D2)
+let relay3 = false;        // Drill / Mixer Actuator (D3)
+let relay4 = false;        // Solenoid Water Valve (D0)
+let node2Distance = 0;     // Bin Level Distance (Ultrasonic cm)
+let paperWhite = false;    // Paper Color Sensor (true = WHITE, false = BLACK)
+let irColor = "BLACK";     // Color Label
+let feederActive = false;  // Node 2 Feeder Motor State
+let paperDetected = false; // Node 2 Paper Sensor State (D5)
 
-// Track Bin Full Notification State to prevent alert spamming
+// Track Bin Full Notification State
 let isBinFullNotified = false;
 
 // Pushover Credentials
 const PUSHOVER_USER_KEY = process.env.PUSHOVER_USER_KEY || "u87wdpc6rv1yp4cdzx8tepvd3hptwk";
 const PUSHOVER_APP_TOKEN = process.env.PUSHOVER_APP_TOKEN || "ayoqjrvo7q1mnheb2r41pzorc3uvbs";
-
-// Fallback device key guarantees 200 OK without environment variable setup
 const DEVICE_KEY = process.env.DEVICE_KEY || "K8xP92mQ7vL4nT6zR3";
 
-// Helper function to send Pushover notifications directly from Render
 function sendPushover(title, message) {
     const postData = querystring.stringify({
         token: PUSHOVER_APP_TOKEN,
@@ -128,7 +129,17 @@ app.get("/api/state", (req, res) => {
         return res.status(401).json({ error: "Not logged in" });
     }
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
-    res.json({ relay1, relay2, relay3, relay4, node2Distance, paperWhite, irColor });
+    res.json({ 
+        relay1, 
+        relay2, 
+        relay3, 
+        relay4, 
+        node2Distance, 
+        paperWhite, 
+        irColor, 
+        feederActive, 
+        paperDetected 
+    });
 });
 
 // CHANGE RELAY (Web Dashboard Manual Commands)
@@ -178,10 +189,20 @@ app.post("/api/relay", (req, res) => {
         }
     }
 
-    res.json({ relay1, relay2, relay3, relay4, node2Distance, paperWhite, irColor });
+    res.json({ 
+        relay1, 
+        relay2, 
+        relay3, 
+        relay4, 
+        node2Distance, 
+        paperWhite, 
+        irColor, 
+        feederActive, 
+        paperDetected 
+    });
 });
 
-// ESP8266 DEVICE POLLING & AUTOMATED WORKFLOW
+// ESP8266 DEVICE POLLING & AUTOMATED TELEMETRY SYNC
 app.post("/api/device", (req, res) => {
     const clientKey = req.query.key;
     if (clientKey && clientKey !== DEVICE_KEY && clientKey !== "K8xP92mQ7vL4nT6zR3") {
@@ -193,19 +214,28 @@ app.post("/api/device", (req, res) => {
         const prevSolenoidState = relay4;
         const prevDrillState    = relay3;
 
+        // 1. NODE 1 RELAY UPDATES (Only update if explicitly sent)
         if (typeof req.body.relay1 === 'boolean') relay1 = req.body.relay1;
         if (typeof req.body.relay2 === 'boolean') relay2 = req.body.relay2;
         if (typeof req.body.relay3 === 'boolean') relay3 = req.body.relay3;
         if (typeof req.body.relay4 === 'boolean') relay4 = req.body.relay4;
 
-        if (req.body.node2Distance !== undefined) node2Distance = req.body.node2Distance;
-        if (req.body.rawDistanceCm !== undefined) node2Distance = req.body.rawDistanceCm;
+        // 2. NODE 1 ULTRASONIC BIN DISTANCE
+        if (req.body.node2Distance !== undefined) node2Distance = Number(req.body.node2Distance);
+        if (req.body.rawDistanceCm !== undefined) node2Distance = Number(req.body.rawDistanceCm);
 
-        // Capture IR Color Telemetry from Node 2 / Node 1
-        if (typeof req.body.paperWhite === 'boolean') paperWhite = req.body.paperWhite;
+        // 3. NODE 1 PAPER SIGNAL TELEMETRY
+        if (typeof req.body.paperWhite === 'boolean') {
+            paperWhite = req.body.paperWhite;
+            irColor = paperWhite ? "WHITE" : "BLACK";
+        }
         if (typeof req.body.irColor === 'string') irColor = req.body.irColor;
 
-        // 1. AUTOMATIC MOTOR START / STOP NOTIFICATIONS (Hardware driven via Node 2 Feeder)
+        // 4. NODE 2 FEEDER TELEMETRY
+        if (typeof req.body.feederActive === 'boolean') feederActive = req.body.feederActive;
+        if (typeof req.body.paperDetected === 'boolean') paperDetected = req.body.paperDetected;
+
+        // 5. PUSHOVER NOTIFICATIONS
         if (prevMotorState !== relay2) {
             if (relay2) {
                 sendPushover("⚙️ Macerator Motor Alert", "Main Shredder Motor STARTED automatically!");
@@ -214,7 +244,6 @@ app.post("/api/device", (req, res) => {
             }
         }
 
-        // 2. SOLENOID VALVE NOTIFICATIONS
         if (prevSolenoidState !== relay4) {
             if (relay4) {
                 sendPushover("💧 Solenoid Valve Alert", "Solenoid Water Valve OPENED!");
@@ -223,7 +252,6 @@ app.post("/api/device", (req, res) => {
             }
         }
 
-        // 3. DRILL ACTUATOR NOTIFICATIONS
         if (prevDrillState !== relay3) {
             if (relay3) {
                 sendPushover("🌀 Drill Actuator Alert", "Drill Actuator STARTED!");
@@ -232,18 +260,29 @@ app.post("/api/device", (req, res) => {
             }
         }
 
-        // 4. BIN FULL ALERT AT EXACTLY 33CM OR CLOSER
+        // BIN FULL ALERT AT EXACTLY 33CM OR CLOSER
         if (node2Distance > 0 && node2Distance <= 33) {
             if (!isBinFullNotified) {
                 isBinFullNotified = true;
                 sendPushover("⚠️ Bin Full Alert!", `Paper bin reached full limit: ${node2Distance} cm (33cm or closer)!`);
             }
         } else if (node2Distance > 33) {
-            isBinFullNotified = false; // Reset notification flag once bin is emptied
+            isBinFullNotified = false;
         }
     }
 
-    res.json({ relay1, relay2, relay3, relay4, paperWhite });
+    // Return merged full state back to ESP8266
+    res.json({ 
+        relay1, 
+        relay2, 
+        relay3, 
+        relay4, 
+        node2Distance, 
+        paperWhite, 
+        irColor, 
+        feederActive, 
+        paperDetected 
+    });
 });
 
 app.get("/health", (req, res) => {
